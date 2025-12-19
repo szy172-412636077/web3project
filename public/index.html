@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureSwap - 買賣家功能整合 PoC</title>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/js-sha256/0.9.0/sha256.min.js"></script>
+
+    <style>
+        body { font-family: 'Arial', sans-serif; padding: 20px; background-color: #f4f4f4; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 10px; box-shadow: 0 0 15px rgba(0,0,0,0.1); }
+        input[type="text"], input[type="number"], select, textarea { 
+            width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; 
+        }
+        button { padding: 12px 25px; cursor: pointer; background-color: #007bff; color: white; border: none; border-radius: 6px; margin-top: 10px; font-weight: bold; }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        .hidden { display: none; } 
+        .section-header { margin-top: 25px; padding-bottom: 5px; border-bottom: 2px solid #eee; }
+        .status { margin-top: 15px; padding: 15px; background-color: #e6f7ff; border: 1px solid #b3e0ff; border-radius: 6px; word-break: break-all; }
+        .record-box { border: 1px solid #ddd; padding: 20px; margin-top: 20px; background-color: #fffaf0; }
+        .hash-display { font-size: 0.8em; color: #666; margin-top: 5px; }
+        .role-button { margin: 5px; width: auto; font-size: 14px;}
+        .loading { opacity: 0.6; pointer-events: none; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1 style="text-align: center;">🛡️ SecureSwap 交易驗證平台 (Live Demo)</h1>
+
+        <div id="connectionStatus" class="status">
+            <button id="connectBtn" style="width: auto;">🔗 連接 MetaMask 錢包</button>
+        </div>
+
+        <h2 class="section-header" style="margin-top: 5px;">角色操作選單</h2>
+        <div id="roleSelection" class="hidden" style="display: flex; justify-content: space-around;">
+            <button class="role-button" onclick="showSection('tradeInputSection')" style="background-color: #28a745;">我是賣家 (發起交易)</button>
+            <button class="role-button" onclick="showSection('querySection')" style="background-color: #ffc107; color: black;">我是買家/交易查詢</button>
+        </div>
+        
+        <hr>
+
+        <div id="tradeInputSection" class="hidden">
+            <h2 class="section-header">1. 發起新交易協定 (賣家)</h2>
+            <label>交易 ID (請自行定義，例如 Order001)：</label>
+            <input type="text" id="inputTradeIdCustom" placeholder="輸入唯一的交易編號">
+
+            <label>買家錢包地址 (約定對象)：</label>
+            <input type="text" id="buyerAddress" placeholder="請輸入買方的 MetaMask 地址">
+
+            <label>價格 (ETH)：</label>
+            <input type="number" id="itemPrice" placeholder="例如：0.05" step="0.0001">
+
+            <label>交貨方式：</label>
+            <select id="deliveryMethod">
+                <option value="面交">面交 (Face-to-face)</option>
+                <option value="郵寄">郵寄 (Shipping)</option>
+            </select>
+            
+            <hr>
+
+            <h3 class="section-header">3. 關鍵商品照片/文件上傳 (Hash 鎖定)</h3>
+            <p>上傳照片作為協定的一部分，其 **Hash 值**將上鏈作為證明。</p>
+            <input type="file" id="evidenceFile" accept="image/*, .pdf">
+            <div id="fileHash" class="hash-display"></div>
+            
+            <button id="createTradeBtn">🔒 確認協定並上鏈</button>
+            <p id="createStatusText" style="color: red;"></p>
+        </div>
+
+        <div id="querySection" class="hidden">
+            <h2 class="section-header">🔍 輸入交易 ID 查詢狀態</h2>
+            <label>輸入賣家提供的交易 ID：</label>
+            <input type="text" id="inputTradeID" placeholder="請輸入交易 ID (例如：Order001)">
+            <button onclick="queryTradeStatus()">查詢交易狀態</button>
+        </div>
+
+        <div id="recordSection" class="hidden">
+            <h2 class="section-header">交易紀錄與操作</h2>
+            <div id="tradeRecordDisplay" class="record-box"></div>
+            <div id="buyerActionArea" style="margin-top: 20px;"></div>
+        </div>
+    </div>
+
+    <script>
+        // ------------------------- 全域變數 -------------------------
+        let userAccount = null;
+        let fileHashValue = ''; 
+
+        // ------------------------- 介面元素 -------------------------
+        const connectBtn = document.getElementById('connectBtn');
+        const connectionStatus = document.getElementById('connectionStatus');
+        const tradeInputSection = document.getElementById('tradeInputSection');
+        const querySection = document.getElementById('querySection');
+        const recordSection = document.getElementById('recordSection');
+        const createTradeBtn = document.getElementById('createTradeBtn');
+        const evidenceFile = document.getElementById('evidenceFile');
+        const fileHashDisplay = document.getElementById('fileHash');
+        const tradeRecordDisplay = document.getElementById('tradeRecordDisplay');
+        const buyerActionArea = document.getElementById('buyerActionArea');
+        const roleSelection = document.getElementById('roleSelection');
+        
+        // ------------------------- 共同功能: 介面切換 -------------------------
+        function showSection(sectionId) {
+            tradeInputSection.classList.add('hidden');
+            querySection.classList.add('hidden');
+            recordSection.classList.add('hidden');
+            document.getElementById(sectionId).classList.remove('hidden');
+        }
+
+        // ------------------------- 模組 1: 連接錢包 -------------------------
+        connectBtn.addEventListener('click', async () => {
+            if (typeof window.ethereum !== 'undefined') {
+                try {
+                    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                    userAccount = accounts[0];
+                    connectionStatus.innerHTML = `👤 已登入: <strong>${userAccount.substring(0,6)}...${userAccount.slice(-4)}</strong>`;
+                    connectBtn.classList.add('hidden');
+                    roleSelection.classList.remove('hidden');
+                    roleSelection.style.display = 'flex';
+                } catch (error) {
+                    console.error(error);
+                    connectionStatus.innerHTML = "❌ 連接失敗";
+                }
+            } else {
+                connectionStatus.innerHTML = "⚠️ 請安裝 MetaMask！";
+            }
+        });
+
+        // ------------------------- 模組 3: 檔案 Hash 計算 -------------------------
+        evidenceFile.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const buffer = e.target.result;
+                fileHashValue = sha256(new Uint8Array(buffer));
+                fileHashDisplay.innerHTML = `文件 Hash (準備上鏈): <span style="color:#007bff;">${fileHashValue}</span>`;
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        // ------------------------- 呼叫後端 API (取代模擬) -------------------------
+
+        // 1. 建立交易
+        createTradeBtn.addEventListener('click', async () => {
+            const tradeId = document.getElementById('inputTradeIdCustom').value;
+            const buyer = document.getElementById('buyerAddress').value;
+            const priceETH = document.getElementById('itemPrice').value;
+            const statusText = document.getElementById('createStatusText');
+
+            if (!tradeId || !buyer || !priceETH) { alert("請填寫完整資訊"); return; }
+
+            createTradeBtn.disabled = true;
+            createTradeBtn.innerText = "正在呼叫智能合約...";
+            statusText.innerText = "⏳ 交易處理中，請稍候 (約需 15-30 秒)...";
+
+            try {
+                // 呼叫你的 server.js API
+                const response = await fetch('/createTrade', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tradeId: tradeId,
+                        buyer: buyer,
+                        priceETH: priceETH,
+                        fileHash: fileHashValue || "NoFile"
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.ok) {
+                    alert("✅ 交易建立成功！\n交易 Hash: " + result.txHash);
+                    statusText.innerText = "";
+                    // 自動跳轉到查詢頁面
+                    document.getElementById('inputTradeID').value = tradeId;
+                    showSection('querySection');
+                    queryTradeStatus();
+                } else {
+                    alert("❌ 失敗: " + result.error);
+                    statusText.innerText = "錯誤: " + result.error;
+                }
+            } catch (err) {
+                console.error(err);
+                alert("伺服器連線錯誤");
+            } finally {
+                createTradeBtn.disabled = false;
+                createTradeBtn.innerText = "🔒 確認協定並上鏈";
+            }
+        });
+
+        // 2. 查詢交易
+        async function queryTradeStatus() {
+            const id = document.getElementById('inputTradeID').value;
+            if (!id) { alert("請輸入 ID"); return; }
+
+            try {
+                const response = await fetch(`/getTrade/${id}`);
+                const data = await response.json();
+
+                if (data.ok) {
+                    showSection('recordSection');
+                    displayTradeRecord(id, data);
+                } else {
+                    alert("查無此交易或發生錯誤: " + data.error);
+                }
+            } catch (err) {
+                console.error(err);
+                alert("查詢失敗");
+            }
+        }
+
+        // 狀態代碼轉文字 helper
+      function getStatusText(statusCode) {
+    // 必須嚴格遵守 Solidity 中的 enum 順序
+    const statuses = [
+        "0. 交易建立 (Created)",    // 賣家剛建立
+        "1. 已托管 (Funded)",      // 買家已付錢
+        "2. 已出貨 (Shipped)",     // 賣家已發貨
+        "3. 已完成 (Completed)",   // 買家已收貨
+        "4. 爭議中 (Disputed)",    // 有人鬧彆扭
+        "5. 已退款 (Refunded)"     // 錢退給買家
+    ];
+    return statuses[statusCode] || "未知狀態";
+}
+
+        // 3. 顯示交易紀錄
+        function displayTradeRecord(tradeId, data) {
+            // 判斷當前使用者是不是買家
+            const isBuyer = userAccount && (userAccount.toLowerCase() === data.buyer.toLowerCase());
+            
+            tradeRecordDisplay.innerHTML = `
+                <h3>🔒 交易 ID: <span style="color:#cc0000;">${tradeId}</span></h3>
+                <div class="status" style="background-color: #f0f8ff;">
+                    <strong>合約狀態:</strong> ${getStatusText(data.status)} 
+                </div>
+                <ul>
+                    <li><strong>賣家:</strong> ${data.seller}</li>
+                    <li><strong>買家:</strong> ${data.buyer}</li>
+                    <li><strong>金額:</strong> ${data.amountETH} ETH</li>
+                    <li><strong>建立時間:</strong> ${new Date(data.createdAt * 1000).toLocaleString()}</li>
+                    <li><strong>文件 Hash:</strong> ${data.fileHash}</li>
+                </ul>
+            `;
+
+            // 動態生成按鈕區
+            buyerActionArea.innerHTML = '';
+            
+            // 狀態 0: Created -> 等待買家付款 (Deposit)
+            if (data.status === 0) {
+                 buyerActionArea.innerHTML += `
+                    <button style="background-color: #ff8c00;" onclick="callApi('/deposit', '${tradeId}', '${data.amountETH}')">
+                        💰 買家支付托管金 (${data.amountETH} ETH)
+                    </button>
+                    <p style="font-size:0.8em; color:gray;">(注意：此 PoC 由伺服器錢包代付 ETH，真實專案應由前端 MetaMask 發起)</p>
+                `;
+            } 
+            // 狀態 1: Locked -> 等待收貨 (Confirm) 或 爭議 (Dispute)
+            else if (data.status === 1) {
+                buyerActionArea.innerHTML += `
+                    <button style="background-color: #28a745;" onclick="callApi('/confirm', '${tradeId}')">
+                        ✅ 確認收貨 (放款給賣家)
+                    </button>
+                    <button style="background-color: #dc3545;" onclick="callApi('/dispute', '${tradeId}')">
+                        🚨 提出爭議 (凍結)
+                    </button>
+                `;
+            }
+            else if (data.status === 2) {
+                buyerActionArea.innerHTML = `<p style="color: green; font-weight: bold;">🎉 交易已順利完成！</p>`;
+            }
+             else if (data.status === 3) {
+                buyerActionArea.innerHTML = `<p style="color: red; font-weight: bold;">⚖️ 交易處於爭議狀態，等待仲裁。</p>`;
+            }
+        }
+
+        // 通用的 API 呼叫函式
+        async function callApi(endpoint, tradeId, priceETH = 0) {
+            if(!confirm("確定要執行此操作上鏈嗎？這需要一點時間。")) return;
+
+            const btnArea = document.getElementById('buyerActionArea');
+            btnArea.classList.add('loading'); // 暫時凍結按鈕
+
+            try {
+                const response = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tradeId: tradeId, priceETH: priceETH })
+                });
+                const result = await response.json();
+                
+                if (result.ok) {
+                    alert("操作成功！\n交易 Hash: " + result.txHash);
+                    // 重新整理狀態
+                    queryTradeStatus();
+                } else {
+                    alert("操作失敗: " + result.error);
+                }
+            } catch (e) {
+                alert("連線錯誤");
+            } finally {
+                btnArea.classList.remove('loading');
+            }
+        }
+    </script>
+</body>
+</html>

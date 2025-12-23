@@ -229,54 +229,56 @@
 }
 
         // 3. 顯示交易紀錄
-        function displayTradeRecord(tradeId, data) {
-            // 判斷當前使用者是不是買家
-            const isBuyer = userAccount && (userAccount.toLowerCase() === data.buyer.toLowerCase());
-            
-            tradeRecordDisplay.innerHTML = `
-                <h3>🔒 交易 ID: <span style="color:#cc0000;">${tradeId}</span></h3>
-                <div class="status" style="background-color: #f0f8ff;">
-                    <strong>合約狀態:</strong> ${getStatusText(data.status)} 
-                </div>
-                <ul>
-                    <li><strong>賣家:</strong> ${data.seller}</li>
-                    <li><strong>買家:</strong> ${data.buyer}</li>
-                    <li><strong>金額:</strong> ${data.amountETH} ETH</li>
-                    <li><strong>建立時間:</strong> ${new Date(data.createdAt * 1000).toLocaleString()}</li>
-                    <li><strong>文件 Hash:</strong> ${data.fileHash}</li>
-                </ul>
-            `;
+function displayTradeRecord(tradeId, data) {
+    // 判斷當前使用者是不是買家
+    const isBuyer = userAccount && (userAccount.toLowerCase() === data.buyer.toLowerCase());
+    
+    tradeRecordDisplay.innerHTML = `
+        <h3>🔒 交易 ID: <span style="color:#cc0000;">${tradeId}</span></h3>
+        <div class="status" style="background-color: #f0f8ff;">
+            <strong>合約狀態:</strong> ${getStatusText(data.status)} 
+        </div>
+        <ul>
+            <li><strong>賣家:</strong> ${data.seller}</li>
+            <li><strong>買家:</strong> ${data.buyer}</li>
+            <li><strong>金額:</strong> ${data.amountETH} ETH</li>
+            <li><strong>建立時間:</strong> ${new Date(data.createdAt * 1000).toLocaleString()}</li>
+            <li><strong>文件 Hash:</strong> ${data.fileHash}</li>
+        </ul>
+    `;
 
-            // 動態生成按鈕區
-            buyerActionArea.innerHTML = '';
-            
-            // 狀態 0: Created -> 等待買家付款 (Deposit)
-            if (data.status === 0) {
-                 buyerActionArea.innerHTML += `
-                    <button style="background-color: #ff8c00;" onclick="callApi('/deposit', '${tradeId}', '${data.amountETH}')">
-                        💰 買家支付托管金 (${data.amountETH} ETH)
-                    </button>
-                    <p style="font-size:0.8em; color:gray;">(注意：此 PoC 由伺服器錢包代付 ETH，真實專案應由前端 MetaMask 發起)</p>
-                `;
-            } 
-            // 狀態 1: Locked -> 等待收貨 (Confirm) 或 爭議 (Dispute)
-            else if (data.status === 1) {
-                buyerActionArea.innerHTML += `
-                    <button style="background-color: #28a745;" onclick="callApi('/confirm', '${tradeId}')">
-                        ✅ 確認收貨 (放款給賣家)
-                    </button>
-                    <button style="background-color: #dc3545;" onclick="callApi('/dispute', '${tradeId}')">
-                        🚨 提出爭議 (凍結)
-                    </button>
-                `;
-            }
-            else if (data.status === 2) {
-                buyerActionArea.innerHTML = `<p style="color: green; font-weight: bold;">🎉 交易已順利完成！</p>`;
-            }
-             else if (data.status === 3) {
-                buyerActionArea.innerHTML = `<p style="color: red; font-weight: bold;">⚖️ 交易處於爭議狀態，等待仲裁。</p>`;
-            }
-        }
+    // 動態生成按鈕區
+    buyerActionArea.innerHTML = '';
+    
+    // --- 修正後的狀態判斷邏輯 ---
+    if (data.status === 0) { // Created
+         buyerActionArea.innerHTML += `
+            <button style="background-color: #ff8c00;" onclick="callApi('/deposit', '${tradeId}', '${data.amountETH}')">
+                💰 買家支付托管金 (${data.amountETH} ETH)
+            </button>
+            <p style="font-size:0.8em; color:gray;">(注意：此 PoC 由伺服器錢包代付 ETH)</p>
+        `;
+    } 
+    else if (data.status === 1 || data.status === 2) { // Funded 或 Shipped
+        buyerActionArea.innerHTML += `
+            <button style="background-color: #28a745;" onclick="callApi('/confirm', '${tradeId}')">
+                ✅ 確認收貨 (放款給賣家)
+            </button>
+            <button style="background-color: #dc3545;" onclick="callApi('/dispute', '${tradeId}')">
+                🚨 提出爭議 (凍結)
+            </button>
+        `;
+    }
+    else if (data.status === 3) { // Completed (依照你的 getStatusText)
+        buyerActionArea.innerHTML = `<p style="color: green; font-weight: bold;">🎉 交易已順利完成！</p>`;
+    }
+    else if (data.status === 4) { // Disputed (依照你的 getStatusText)
+        buyerActionArea.innerHTML = `<p style="color: red; font-weight: bold;">⚖️ 交易處於爭議狀態，等待仲裁。</p>`;
+    }
+    else if (data.status === 5) { // Refunded
+        buyerActionArea.innerHTML = `<p style="color: blue; font-weight: bold;">💸 交易已關閉，款項已退還買家。</p>`;
+    }
+}
 
         // 通用的 API 呼叫函式
         async function callApi(endpoint, tradeId, priceETH = 0) {

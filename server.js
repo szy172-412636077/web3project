@@ -161,6 +161,23 @@ app.post('/dispute', async (req, res) => {
         res.status(500).json({ ok: false, error: e.message }); 
     }
 });
+// 5. 仲裁解決爭議 (管理員專用)
+app.post('/resolveDispute', async (req, res) => {
+    try {
+        const { tradeId, resolution } = req.body; // resolution: 1 為退款給買家, 2 為放款給賣家
+        const id = formatId(tradeId);
+
+        // 呼叫智能合約中的解決爭議函數
+        // 假設你的合約函數名稱是 resolve (請依實際合約修改)
+        const tx = await global.contract.resolveDispute(id, resolution);
+        await tx.wait();
+
+        res.json({ ok: true, txHash: tx.hash, message: "爭議已解決" });
+    } catch (e) {
+        console.error(e);
+        res.status(500).json({ ok: false, error: e.message });
+    }
+});
 
 // -------------------------- 啟動伺服器 -------------------------------
 const PORT = 3000;

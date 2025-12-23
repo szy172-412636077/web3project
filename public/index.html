@@ -250,34 +250,39 @@ function displayTradeRecord(tradeId, data) {
     // 動態生成按鈕區
     buyerActionArea.innerHTML = '';
     
-    // --- 修正後的狀態判斷邏輯 ---
-    if (data.status === 0) { // Created
-         buyerActionArea.innerHTML += `
-            <button style="background-color: #ff8c00;" onclick="callApi('/deposit', '${tradeId}', '${data.amountETH}')">
-                💰 買家支付托管金 (${data.amountETH} ETH)
-            </button>
-            <p style="font-size:0.8em; color:gray;">(注意：此 PoC 由伺服器錢包代付 ETH)</p>
-        `;
-    } 
-    else if (data.status === 1 || data.status === 2) { // Funded 或 Shipped
-        buyerActionArea.innerHTML += `
-            <button style="background-color: #28a745;" onclick="callApi('/confirm', '${tradeId}')">
-                ✅ 確認收貨 (放款給賣家)
-            </button>
-            <button style="background-color: #dc3545;" onclick="callApi('/dispute', '${tradeId}')">
-                🚨 提出爭議 (凍結)
-            </button>
-        `;
-    }
-    else if (data.status === 3) { // Completed (依照你的 getStatusText)
-        buyerActionArea.innerHTML = `<p style="color: green; font-weight: bold;">🎉 交易已順利完成！</p>`;
-    }
-    else if (data.status === 4) { // Disputed (依照你的 getStatusText)
-        buyerActionArea.innerHTML = `<p style="color: red; font-weight: bold;">⚖️ 交易處於爭議狀態，等待仲裁。</p>`;
-    }
-    else if (data.status === 5) { // Refunded
-        buyerActionArea.innerHTML = `<p style="color: blue; font-weight: bold;">💸 交易已關閉，款項已退還買家。</p>`;
-    }
+    if (data.status === 0) { // Created - 等待買家付錢
+    buyerActionArea.innerHTML = `
+        <button style="background-color: #ff8c00;" onclick="callApi('/deposit', '${tradeId}', '${data.amountETH}')">
+            💰 買家支付托管金 (${data.amountETH} ETH)
+        </button>
+    `;
+} 
+else if (data.status === 1 || data.status === 2) { // Funded 或 Shipped - 可確認收貨或提爭議
+    buyerActionArea.innerHTML = `
+        <button style="background-color: #28a745;" onclick="callApi('/confirm', '${tradeId}')">
+            ✅ 確認收貨 (放款給賣家)
+        </button>
+        <button style="background-color: #dc3545;" onclick="callApi('/dispute', '${tradeId}')">
+            🚨 提出爭議 (凍結)
+        </button>
+    `;
+}
+else if (data.status === 3) { // Completed - 只顯示成功，絕不顯示紅字
+    buyerActionArea.innerHTML = `<p style="color: green; font-weight: bold; font-size: 1.2em;">🎉 交易已順利完成！</p>`;
+}
+else if (data.status === 4) { // Disputed
+    buyerActionArea.innerHTML = `
+        <p style="color: red; font-weight: bold;">⚖️ 交易處於爭議狀態，等待仲裁。</p>
+        <div style="border: 1px dashed gray; padding: 10px; margin-top: 10px;">
+            <p><strong>[管理員仲裁區]</strong></p>
+            <button style="background-color: #6c757d;" onclick="callApi('/resolveDispute', '${tradeId}', 1)">退款給買家 (Refund)</button>
+            <button style="background-color: #6c757d;" onclick="callApi('/resolveDispute', '${tradeId}', 2)">放款給賣家 (Release)</button>
+        </div>
+    `;
+}
+else if (data.status === 5) { // Refunded
+    buyerActionArea.innerHTML = `<p style="color: blue; font-weight: bold;">💸 款項已退還買家，交易關閉。</p>`;
+}
 }
 
         // 通用的 API 呼叫函式

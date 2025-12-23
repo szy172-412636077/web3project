@@ -164,17 +164,30 @@ app.post('/dispute', async (req, res) => {
 // 5. 仲裁解決爭議 (管理員專用)
 app.post('/resolveDispute', async (req, res) => {
     try {
-        const { tradeId, resolution } = req.body; // resolution: 1 為退款給買家, 2 為放款給賣家
+        const { tradeId, resolution } = req.body; 
         const id = formatId(tradeId);
 
-        // 呼叫智能合約中的解決爭議函數
-        // 假設你的合約函數名稱是 resolve (請依實際合約修改)
-        const tx = await global.contract.resolveDispute(id, resolution);
-        await tx.wait();
+        // 先從合約抓取該筆交易的資料，獲取買家、賣家地址和剩餘金額
+        const trade = await global.contract.trades(id);
+        const buyer = trade.buyer;
+        const seller = trade.seller;
+        const currentAmount = trade.amount; // 這是合約裡的 Wei
 
-        res.json({ ok: true, txHash: tx.hash, message: "爭議已解決" });
+        let tx;
+        if (resolution === 1) {
+            // 方案 A: 全額退款給買家
+            // 你的合約有 refundAll 函數，直接用它最方便
+            tx = await global.contract.refundAll(id);
+        } else {
+            // 方案 B: 放款給賣家
+            // 使用 resolveDispute(id, 賣家地址, 全部金額)
+            tx = await global.contract.resolveDispute(id, seller, currentAmount);
+        }
+
+        await tx.wait();
+        res.json({ ok: true, txHash: tx.hash });
     } catch (e) {
-        console.error(e);
+        console.error("Arbitration Error:", e);
         res.status(500).json({ ok: false, error: e.message });
     }
 });

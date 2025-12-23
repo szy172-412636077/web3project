@@ -270,13 +270,13 @@ else if (data.status === 1 || data.status === 2) { // Funded 或 Shipped - 可�
 else if (data.status === 3) { // Completed - 只顯示成功，絕不顯示紅字
     buyerActionArea.innerHTML = `<p style="color: green; font-weight: bold; font-size: 1.2em;">🎉 交易已順利完成！</p>`;
 }
-else if (data.status === 4) { // Disputed
+else if (data.status === 4) { // 狀態 4: Disputed
     buyerActionArea.innerHTML = `
         <p style="color: red; font-weight: bold;">⚖️ 交易處於爭議狀態，等待仲裁。</p>
-        <div style="border: 1px dashed gray; padding: 10px; margin-top: 10px;">
-            <p><strong>[管理員仲裁區]</strong></p>
-            <button style="background-color: #6c757d;" onclick="callApi('/resolveDispute', '${tradeId}', 1)">退款給買家 (Refund)</button>
-            <button style="background-color: #6c757d;" onclick="callApi('/resolveDispute', '${tradeId}', 2)">放款給賣家 (Release)</button>
+        <div style="border: 1px dashed #ccc; padding: 15px; margin-top: 10px; background: #fff;">
+            <p style="margin-top:0;"><strong>🛠️ 管理員仲裁工具</strong></p>
+            <button style="background-color: #6c757d;" onclick="callApi('/resolveDispute', '${tradeId}', 1)">退款給買家 (Refund All)</button>
+            <button style="background-color: #444;" onclick="callApi('/resolveDispute', '${tradeId}', 2)">放款給賣家 (Release All)</button>
         </div>
     `;
 }

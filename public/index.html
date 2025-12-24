@@ -279,7 +279,7 @@ else if (data.status === 4) { // 狀態 4: Disputed
             <button style="background-color: #444;" onclick="callApi('/resolveDispute', '${tradeId}', 2)">放款給賣家 (Release All)</button>
         </div>
     `;
-}
+}   
 else if (data.status === 5) { // Refunded
     buyerActionArea.innerHTML = `<p style="color: blue; font-weight: bold;">💸 款項已退還買家，交易關閉。</p>`;
 }
